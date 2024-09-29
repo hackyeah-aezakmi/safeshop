@@ -47,13 +47,15 @@ func main() {
 		hostname = string(decodedHostname)
 		log.Println("Checking domain:", hostname)
 
-		// Use latestDomains instead of receiving from the channel
+		// Calculate score for blacklisted domains
+		blacklistedScore := 1.0
 		for _, maliciousDomain := range latestDomains {
 			if strings.HasSuffix(hostname, maliciousDomain) {
-				c.String(http.StatusOK, "Received request for hostname: %s", hostname)
-				return
+				blacklistedScore = 0.0
+				break
 			}
 		}
+		log.Printf("Domain %s blacklisted score: %f", hostname, blacklistedScore)
 
 		// Check domain age
 		domainAge, err := getDomainAgeInDays(hostname)
@@ -63,24 +65,29 @@ func main() {
 			return
 		}
 
+		var domainAgeScore float64
 		if domainAge < 60 {
-			log.Printf("Domain %s is less than 60 days old", hostname)
+			domainAgeScore = 1.0
 		} else if domainAge < 365 {
-			log.Printf("Domain %s is between 60 and 365 days old", hostname)
+			domainAgeScore = 0.5
 		} else {
-			log.Printf("Domain %s is more than 1 year old", hostname)
+			domainAgeScore = 0.0
 		}
+		log.Printf("Domain %s age score: %f", hostname, domainAgeScore)
 
-		// Get AI domain score
-		score, err := ai.GetDomainScore(*client, hostname)
+		// Get domain name score from AI
+		domainScore, err := ai.GetDomainScore(*client, hostname)
 		if err != nil {
 			log.Printf("Error getting domain score: %v", err)
 			c.String(http.StatusInternalServerError, "Error getting domain score")
 			return
 		}
-		log.Printf("Domain %s score: %d", hostname, score)
+		log.Printf("Domain %s score by AI: %f", hostname, domainScore)
 
-		c.String(http.StatusOK, "Received request for hostname: %s", hostname)
+		score := int((domainAgeScore*0.3 + domainScore*0.3 + blacklistedScore*0.4) * 100)
+		log.Printf("Domain %s final score: %d", hostname, score)
+
+		c.JSON(http.StatusOK, gin.H{"score": score})
 	})
 
 	r.Run(":8080")

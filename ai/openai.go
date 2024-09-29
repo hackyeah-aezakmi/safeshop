@@ -5,18 +5,32 @@ import (
 	"context"
 	"encoding/json"
 	"html/template"
+	"log"
 
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/sashabaranov/go-openai/jsonschema"
 )
 
-var scorePrompt = `You are a URL classifier for online stores. Your job is to rate a URL on how likely it is to lead to a fake online store. You can use values ​​between 1 and 10, where low values ​​mean low probability and high values ​​mean high probability.
+var scorePrompt = `You are an expert URL classifier specializing in detecting fraudulent online stores. Your task is to analyze the given domain and assess the likelihood that it leads to a fake online store. 
+
+Consider the following factors in your analysis:
+1. Domain name structure and relevance to legitimate businesses
+2. Use of suspicious keywords or misspellings
+3. Presence of well-known brand names in unexpected contexts
+4. Unusual top-level domains (TLDs) that are often associated with scams
+
+Rate the domain on a scale from 1 to 5:
+1: Very low probability of being a fake store
+2: Low probability
+3: Moderate probability
+4: High probability
+5: Very high probability of being a fake store
 
 Domain:
 {{ .Domain }}
 `
 
-func GetDomainScore(client openai.Client, domain string) (int, error) {
+func GetDomainScore(client openai.Client, domain string) (float64, error) {
 	tmpl, err := template.New("scorePrompt").Parse(scorePrompt)
 	if err != nil {
 		return 0, err
@@ -66,5 +80,9 @@ func GetDomainScore(client openai.Client, domain string) (int, error) {
 	if err := json.Unmarshal([]byte(content), &response); err != nil {
 		return 0, err
 	}
-	return response.Score, nil
+
+	log.Printf("Domain %s score by AI: %d", domain, response.Score)
+	// Convert score from 1-5 to 0-1
+	score := (float64(response.Score) - 1) / 4.0
+	return score, nil
 }
